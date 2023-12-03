@@ -11,6 +11,7 @@ use std::{
 use anyhow::{Context, Ok};
 use chrono::Utc;
 use clap::Parser;
+use colored::Colorize;
 use honeycomb::{Column, HoneyComb};
 use semconv::{SemanticConventions, Suggestion};
 
@@ -55,9 +56,27 @@ impl ColumnUsage {
 }
 
 #[derive(Debug)]
+struct DatasetHealth {
+    matching: usize,
+    missing: usize,
+    bad: usize,
+}
+
+impl DatasetHealth {
+    fn new() -> Self {
+        Self {
+            matching: 0,
+            missing: 0,
+            bad: 0,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct ColumnUsageMap {
     map: HashMap<String, ColumnUsage>,
     datasets: Vec<String>,
+    dataset_health: Vec<DatasetHealth>,
     semconv: SemanticConventions,
 }
 
@@ -71,6 +90,7 @@ impl ColumnUsageMap {
         let mut cm = ColumnUsageMap {
             map: HashMap::new(),
             datasets: vec![],
+            dataset_health: vec![],
             semconv: sc,
         };
         let hc = HoneyComb::new();
@@ -96,25 +116,43 @@ impl ColumnUsageMap {
             .collect::<Vec<_>>();
         datasets.sort();
         cm.datasets = datasets;
+        eprint!("Reading datasets ");
         for (dataset_num, dataset_slug) in cm.datasets.iter().enumerate() {
             //println!("Reading dataset: {}", dataset_slug);
+            eprint!(".");
             let columns = hc.list_all_columns(dataset_slug)?;
-
+            let mut dataset_health = DatasetHealth::new();
             for column in columns {
                 let duration = now - column.last_written;
                 if duration.num_days() < 60 {
+                    let health: Suggestion;
                     if let Some(cu) = cm.map.get_mut(&column.key_name) {
                         cu.datasets[dataset_num] = true;
+                        health = cu.suggestion.clone();
                     } else {
                         let key_name = column.key_name.clone();
                         let suggestion = cm.semconv.get_suggestion(&key_name);
-                        let cu =
-                            ColumnUsage::new(column, suggestion, cm.datasets.len(), dataset_num);
+                        let cu = ColumnUsage::new(
+                            column,
+                            suggestion.clone(),
+                            cm.datasets.len(),
+                            dataset_num,
+                        );
                         cm.map.insert(key_name, cu);
+                        health = suggestion;
+                    }
+                    match health {
+                        Suggestion::Matching => dataset_health.matching += 1,
+                        Suggestion::Missing | Suggestion::Extends(_) | Suggestion::Similar(_) => {
+                            dataset_health.missing += 1
+                        }
+                        _ => dataset_health.bad += 1,
                     }
                 }
             }
+            cm.dataset_health.push(dataset_health);
         }
+        eprintln!();
         Ok(cm)
     }
 
@@ -136,6 +174,88 @@ impl ColumnUsageMap {
         }
         Ok(())
     }
+
+    fn print_health(&self) {
+        // find the length of the longest dataset name
+        let longest = "Dataset".len().max(
+            self.datasets
+                .iter()
+                .map(|dataset_slug| dataset_slug.len())
+                .max()
+                .unwrap_or(0),
+        );
+
+        println!(
+            "{:>width$} {} {}  {}  {}",
+            "Dataset".bold(),
+            "Match".bold().green(),
+            "Miss".bold().yellow(),
+            "Bad".bold().red(),
+            "Score".bold().blue(),
+            width = longest
+        );
+        for (dataset_num, dataset_slug) in self.datasets.iter().enumerate() {
+            let dataset_health = &self.dataset_health[dataset_num];
+            let total = dataset_health.matching + dataset_health.missing + dataset_health.bad;
+            let score = if total == 0 {
+                0.0
+            } else {
+                (dataset_health.matching as f64 / total as f64) * 100.0
+            };
+
+            println!(
+                "{:>width$}  {:4} {:4} {:4} {:>5.1}%",
+                dataset_slug,
+                dataset_health.matching,
+                dataset_health.missing,
+                dataset_health.bad,
+                score,
+                width = longest
+            );
+        }
+    }
+
+    fn print_dataset_report(&self) {
+        // If there's only one dataset, print the columns that are not matching
+        if self.datasets.len() == 1 {
+            let mut columns = self.map.values().collect::<Vec<_>>();
+            let longest = "Column".len().max(
+                columns
+                    .iter()
+                    .map(|c| c.column.key_name.len())
+                    .max()
+                    .unwrap_or(0),
+            );
+            columns.sort_by(|a, b| a.column.key_name.cmp(&b.column.key_name));
+            println!(
+                "\n{:>width$} {}",
+                "Column".bold(),
+                "Suggestion".bold(),
+                width = longest
+            );
+            for c in columns {
+                match c.suggestion {
+                    Suggestion::Matching => {}
+                    Suggestion::NoNamespace | Suggestion::WrongCase => {
+                        println!(
+                            "{:>width$} {}",
+                            c.column.key_name.red(),
+                            c.suggestion,
+                            width = longest
+                        );
+                    }
+                    _ => {
+                        println!(
+                            "{:>width$} {}",
+                            c.column.key_name.yellow(),
+                            c.suggestion,
+                            width = longest
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -155,12 +275,16 @@ struct Args {
 
     /// Datasets
     ///
-    /// Provide zero or more dataset names to limit the report, otherwise
-    /// all datasets are included.
+    /// Provide zero or more dataset names to limit the report. Omitting this
+    /// means all datasets are included. A single dataset will print a report
+    /// rather than a CSV file.
     #[arg(short, long, required = false, num_args(0..))]
     dataset: Option<Vec<String>>,
 
     /// Output file path
+    ///
+    /// Provide a path to the CSV dataset comparison report. This is only
+    /// used when more than one dataset is included.
     #[arg(short, long, default_value_t = String::from("hh_report.csv"))]
     output: String,
 }
@@ -183,5 +307,20 @@ fn main() -> anyhow::Result<()> {
     }
     let include_datasets = args.dataset.map(HashSet::from_iter);
     let cm = ColumnUsageMap::new(&root_dirs, include_datasets)?;
-    cm.to_csv(&args.output)
+    if cm.datasets.is_empty() {
+        println!("No datasets found");
+        return Ok(());
+    }
+    if cm.datasets.len() > 1 {
+        cm.to_csv(&args.output)?;
+    }
+    cm.print_health();
+    cm.print_dataset_report();
+    Ok(())
 }
+
+// IDEAS
+// Store the namespace as a trie for searching
+// Provide command line to explore the trie to help find suitable namespaces and attribute names
+// Search for attributes with natural language
+// Generate a web page with a tree explorer across your semantic conventions

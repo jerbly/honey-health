@@ -1,14 +1,22 @@
 use glob::glob;
 use serde::Deserialize;
-use std::{collections::HashMap, fmt::Display, fs::File, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    fs::File,
+    path::PathBuf,
+};
 use strsim::jaro;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Suggestion {
     Matching,
     Missing,
     WrongCase,
     Similar(Vec<String>),
+    Extends(String),
+    //DeepNamespace, // TODO if the namespace is deep, it could indicate encoding a code path
+    NoNamespace,
 }
 
 impl Display for Suggestion {
@@ -17,7 +25,9 @@ impl Display for Suggestion {
             Suggestion::Matching => write!(f, "Matching"),
             Suggestion::Missing => write!(f, "Missing"),
             Suggestion::WrongCase => write!(f, "WrongCase"),
+            Suggestion::NoNamespace => write!(f, "NoNamespace"),
             Suggestion::Similar(v) => write!(f, "Similar to {}", v.join(" ")),
+            Suggestion::Extends(s) => write!(f, "Extends {}", s),
         }
     }
 }
@@ -43,13 +53,16 @@ struct Groups {
 pub struct SemanticConventions {
     // Have a map of constructed-attribute-name as key, to, brief as value
     pub attribute_map: HashMap<String, String>,
+    pub prefixes: HashSet<String>,
 }
 
 impl SemanticConventions {
     pub fn new(root_dirs: &[String]) -> anyhow::Result<Self> {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
+            prefixes: HashSet::new(),
         };
+        sc.populate_builtins();
         for root_dir in root_dirs {
             let yml = format!("{root_dir}/**/*.yml");
             let yaml = format!("{root_dir}/**/*.yaml");
@@ -58,6 +71,32 @@ impl SemanticConventions {
             }
         }
         Ok(sc)
+    }
+
+    fn populate_builtins(&mut self) {
+        let builtins = [
+            "duration_ms",
+            "type",
+            "meta.signal_type",
+            "name",
+            "span.kind",
+            "span.num_events",
+            "span.num_links",
+            "trace.parent_id",
+            "trace.span_id",
+            "trace.trace_id",
+            "meta.annotation_type",
+            "parent_name",
+            "status_code",
+            "error",
+        ];
+        for builtin in builtins {
+            self.attribute_map.insert(builtin.to_owned(), "".to_owned());
+        }
+        let builtin_prefixes = ["meta", "span", "trace"];
+        for builtin_prefix in builtin_prefixes {
+            self.prefixes.insert(builtin_prefix.to_owned());
+        }
     }
 
     pub fn read_file(&mut self, path: PathBuf) -> anyhow::Result<()> {
@@ -69,6 +108,7 @@ impl SemanticConventions {
                     if let (Some(id), Some(brief)) = (attribute.id, attribute.brief) {
                         self.attribute_map
                             .insert(format!("{}.{}", prefix, id), brief.trim().to_owned());
+                        self.insert_prefixes(&prefix);
                     }
                 }
             }
@@ -83,6 +123,36 @@ impl SemanticConventions {
             }
         }
         false
+    }
+
+    // Break up the namespace a.b.c into a, a.b, a.b.c and store them in the set
+    // TODO store this as a trie
+    fn insert_prefixes(&mut self, input: &str) {
+        let mut prefix = String::new();
+        for c in input.chars() {
+            if c == '.' {
+                self.prefixes.insert(prefix.clone());
+            }
+            prefix.push(c);
+        }
+        self.prefixes.insert(prefix.clone());
+    }
+
+    // Split the input at the final dot, and see if the prefix exists
+    fn prefix_exists(&self, input: &str) -> Option<String> {
+        for (i, c) in input.chars().rev().enumerate() {
+            if c == '.' {
+                let s = input[..input.len() - (i + 1)].to_string();
+                if self.prefixes.contains(&s) {
+                    return Some(s);
+                }
+            }
+        }
+        None
+    }
+
+    fn has_namespace(&self, input: &str) -> bool {
+        input.contains('.')
     }
 
     fn similar(&self, input: &str) -> Option<Vec<String>> {
@@ -107,10 +177,71 @@ impl SemanticConventions {
             Suggestion::Matching
         } else if Self::contains_uppercase(name) {
             Suggestion::WrongCase
+        } else if let Some(s) = self.prefix_exists(name) {
+            Suggestion::Extends(s)
+        } else if !self.has_namespace(name) {
+            Suggestion::NoNamespace
         } else if let Some(similar_name) = self.similar(name) {
             Suggestion::Similar(similar_name)
         } else {
             Suggestion::Missing
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_populate_builtins() {
+        let mut sc = SemanticConventions {
+            attribute_map: HashMap::new(),
+            prefixes: HashSet::new(),
+        };
+        sc.populate_builtins();
+        assert!(sc.attribute_map.contains_key("duration_ms"));
+        assert!(sc.prefixes.contains("meta"));
+    }
+
+    #[test]
+    fn test_contains_uppercase() {
+        assert!(SemanticConventions::contains_uppercase("Test"));
+        assert!(!SemanticConventions::contains_uppercase("test"));
+    }
+
+    #[test]
+    fn test_insert_prefixes() {
+        let mut sc = SemanticConventions {
+            attribute_map: HashMap::new(),
+            prefixes: HashSet::new(),
+        };
+        sc.insert_prefixes("a.b.c");
+        assert!(sc.prefixes.contains("a"));
+        assert!(sc.prefixes.contains("a.b"));
+        assert!(sc.prefixes.contains("a.b.c"));
+    }
+
+    #[test]
+    fn test_prefix_exists() {
+        let mut sc = SemanticConventions {
+            attribute_map: HashMap::new(),
+            prefixes: HashSet::new(),
+        };
+        sc.insert_prefixes("a.b.c");
+        assert_eq!(sc.prefix_exists("a.b.c.d"), Some("a.b.c".to_string()));
+        assert_eq!(sc.prefix_exists("a.d"), Some("a".to_string()));
+        assert_eq!(sc.prefix_exists("x.y.z"), None);
+    }
+
+    #[test]
+    fn test_similar() {
+        let mut sc = SemanticConventions {
+            attribute_map: HashMap::new(),
+            prefixes: HashSet::new(),
+        };
+        sc.attribute_map.insert("test".to_string(), "".to_string());
+        assert_eq!(sc.similar("test"), Some(vec!["test".to_string()]));
+        assert_eq!(sc.similar("x"), None);
     }
 }
