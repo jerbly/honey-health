@@ -143,9 +143,7 @@ impl ColumnUsageMap {
                     }
                     match health {
                         Suggestion::Matching => dataset_health.matching += 1,
-                        Suggestion::Missing | Suggestion::Extends(_) | Suggestion::Similar(_) => {
-                            dataset_health.missing += 1
-                        }
+                        Suggestion::Missing(_) => dataset_health.missing += 1,
                         _ => dataset_health.bad += 1,
                     }
                 }
@@ -161,14 +159,19 @@ impl ColumnUsageMap {
         let mut file = BufWriter::new(file);
         let mut columns = self.map.values().collect::<Vec<_>>();
         columns.sort_by(|a, b| a.column.key_name.cmp(&b.column.key_name));
-        writeln!(file, "Name,Type,SemConv,Usage,{},", self.datasets.join(","))?;
+        writeln!(
+            file,
+            "Name,Type,SemConv,Hint,Usage,{},",
+            self.datasets.join(",")
+        )?;
         for c in columns {
             writeln!(
                 file,
-                "{},{},{},{}",
+                "{},{},{},{},{}",
                 c.column.key_name,
                 c.column.r#type,
-                c.suggestion,
+                c.suggestion.get_name(),
+                c.suggestion.get_comments_string(),
                 c.datasets_as_string()
             )?;
         }
@@ -236,10 +239,10 @@ impl ColumnUsageMap {
             for c in columns {
                 match c.suggestion {
                     Suggestion::Matching => {}
-                    Suggestion::NoNamespace | Suggestion::WrongCase => {
+                    Suggestion::Missing(_) => {
                         println!(
                             "{:>width$} {}",
-                            c.column.key_name.red(),
+                            c.column.key_name.yellow(),
                             c.suggestion,
                             width = longest
                         );
@@ -247,7 +250,7 @@ impl ColumnUsageMap {
                     _ => {
                         println!(
                             "{:>width$} {}",
-                            c.column.key_name.yellow(),
+                            c.column.key_name.red(),
                             c.suggestion,
                             width = longest
                         );

@@ -11,7 +11,46 @@ use strsim::jaro;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Suggestion {
     Matching,
-    Missing,
+    Missing(Vec<SuggestionComment>),
+    Bad(Vec<SuggestionComment>),
+}
+
+impl Suggestion {
+    pub fn get_name(&self) -> String {
+        match self {
+            Suggestion::Matching => "Matching".to_string(),
+            Suggestion::Missing(_) => "Missing".to_string(),
+            Suggestion::Bad(_) => "Bad".to_string(),
+        }
+    }
+    pub fn get_comments_string(&self) -> String {
+        match self {
+            Suggestion::Matching => "".to_string(),
+            Suggestion::Missing(comments) => comments
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join("; "),
+            Suggestion::Bad(comments) => comments
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join("; "),
+        }
+    }
+}
+
+impl Display for Suggestion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Suggestion::Matching => write!(f, "Matching"),
+            _ => write!(f, "{:7}  {}", self.get_name(), self.get_comments_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SuggestionComment {
     WrongCase,
     Similar(Vec<String>),
     Extends(String),
@@ -19,15 +58,13 @@ pub enum Suggestion {
     NoNamespace,
 }
 
-impl Display for Suggestion {
+impl Display for SuggestionComment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Suggestion::Matching => write!(f, "Matching"),
-            Suggestion::Missing => write!(f, "Missing"),
-            Suggestion::WrongCase => write!(f, "WrongCase"),
-            Suggestion::NoNamespace => write!(f, "NoNamespace"),
-            Suggestion::Similar(v) => write!(f, "Similar to {}", v.join(" ")),
-            Suggestion::Extends(s) => write!(f, "Extends {}", s),
+            SuggestionComment::WrongCase => write!(f, "WrongCase"),
+            SuggestionComment::NoNamespace => write!(f, "NoNamespace"),
+            SuggestionComment::Similar(v) => write!(f, "Similar to {}", v.join(" ")),
+            SuggestionComment::Extends(s) => write!(f, "Extends {}", s),
         }
     }
 }
@@ -175,16 +212,29 @@ impl SemanticConventions {
         // Is this already a semantic convention
         if self.attribute_map.contains_key(name) {
             Suggestion::Matching
-        } else if Self::contains_uppercase(name) {
-            Suggestion::WrongCase
-        } else if let Some(s) = self.prefix_exists(name) {
-            Suggestion::Extends(s)
-        } else if !self.has_namespace(name) {
-            Suggestion::NoNamespace
-        } else if let Some(similar_name) = self.similar(name) {
-            Suggestion::Similar(similar_name)
         } else {
-            Suggestion::Missing
+            let mut bad = false;
+            // get all the suggestion comments
+            let mut comments = Vec::new();
+            if Self::contains_uppercase(name) {
+                comments.push(SuggestionComment::WrongCase);
+                bad = true;
+            }
+            if let Some(s) = self.prefix_exists(name) {
+                comments.push(SuggestionComment::Extends(s));
+            }
+            if !self.has_namespace(name) {
+                comments.push(SuggestionComment::NoNamespace);
+                bad = true;
+            }
+            if let Some(similar_names) = self.similar(name) {
+                comments.push(SuggestionComment::Similar(similar_names));
+            }
+            if bad {
+                Suggestion::Bad(comments)
+            } else {
+                Suggestion::Missing(comments)
+            }
         }
     }
 }

@@ -3,21 +3,35 @@
 Generates reports on the health of your Honeycomb datasets' attribute names.
 Provide it with OpenTelemetry Semantic Convention compatible files to find mismatches and suggestions. Compare all, or a limited set of your datasets to find commonly used attributes that may benefit from being codified into Semantic Conventions.
 
-The output is a csv file like so:
+The output depends on the number of datasets provided and found for analysis. If a single dataset is analysed, then a csv comparison file is NOT produced (there's no other dataset to compare against!) Instead you will see output in the console like so:
 
-| Name               | Type   | SemConv                  | Usage | dataset1 | dataset2 | dataset3 |
-| ------------------ | ------ | ------------------------ | ----- | -------- | -------- | -------- |
-| aws.s3.bucket.name | string | Similar to aws.s3.bucket | 1     |          |          | x        |
-| aws.s3.key         | string | Matching                 | 1     |          |          | x        |
-| task.id            | string | Missing                  | 2     | x        |          | x        |
-| TaskId             | string | WrongCase                | 1     |          | x        |          |
+```text
+  Dataset  Match Miss  Bad  Score
+  dataset3    28   11    2  68.3%
+  
+              Column Suggestion
+  aws.s3.bucket.name Missing  Extends aws.s3; Similar to aws.s3.bucket
+             task.id Missing
+              TaskId Bad      WrongCase; NoNamespace  
+```
+
+You will always see the top section showing the number of Matching, Missing and Bad attributes. The Score is the proportion of Matching attributes (those which have defined Semantic Conventions).
+
+If there is more that one dataset, the output is a csv file like so:
+
+| Name               | Type   | SemConv  | Hint                                     | Usage | dataset1 | dataset2 | dataset3 |
+| ------------------ | ------ | -------- | ---------------------------------------- | ----- | -------- | -------- | -------- |
+| aws.s3.bucket.name | string | Missing  | Extends aws.s3; Similar to aws.s3.bucket | 1     |          |          | x        |
+| aws.s3.key         | string | Matching |                                          | 1     |          |          | x        |
+| task.id            | string | Missing  |                                          | 2     | x        |          | x        |
+| TaskId             | string | Bad      | WrongCase; NoNamespace                   | 1     |          | x        |          |
 
 This example report is pointing out the follow:
 
-- `aws.s3.bucket.name` has not been found in the provided semantic conventions. However, there is an attribute in the model with a similar name: `aws.s3.bucket`. The application delivering to `dataset3` should have its instrumention adjusted to the standard.
+- `aws.s3.bucket.name` has not been found in the provided semantic conventions. However, there is a namespace `aws.s3` that this attribute would extend. Also, there is an attribute in the model with a similar name: `aws.s3.bucket`. The application delivering to `dataset3` should have its instrumention adjusted to the standard.
 - `aws.s3.key` is in use by `dataset3` and matches a semantic convention in the provided models.
 - `task.id` is missing from the provided model but is used by 2 datasets: `dataset1` and `dataset3`. Perhaps this is a good candidate to standardise into your own semantic conventions?
-- `TaskId` is in CamelCase which does not follow the recommended standard for attribute naming.
+- `TaskId` is in CamelCase which does not follow the recommended standard for attribute naming. Also, this is a top-level name with no namespace - this will pollute the namespace tree.
 
 > **Note**
 >
@@ -33,7 +47,7 @@ cargo build --release
 
 ## Usage
 
-```
+```text
 Honey Health
 
 Usage: honey-health [OPTIONS] --model <MODEL>...
