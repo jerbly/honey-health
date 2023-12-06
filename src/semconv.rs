@@ -26,12 +26,7 @@ impl Suggestion {
     pub fn get_comments_string(&self) -> String {
         match self {
             Suggestion::Matching => "".to_string(),
-            Suggestion::Missing(comments) => comments
-                .iter()
-                .map(|x| x.to_string())
-                .collect::<Vec<String>>()
-                .join("; "),
-            Suggestion::Bad(comments) => comments
+            Suggestion::Missing(comments) | Suggestion::Bad(comments) => comments
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()

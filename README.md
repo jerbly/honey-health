@@ -1,14 +1,15 @@
 # Honey Health
 
-Generates reports on the health of your Honeycomb datasets' attribute names.
-Provide it with OpenTelemetry Semantic Convention compatible files to find mismatches and suggestions. Compare all, or a limited set of your datasets to find commonly used attributes that may benefit from being codified into Semantic Conventions.
+Generates reports on the health of your [Honeycomb](https://honeycomb.io) datasets' attribute names.
+
+Provide it with OpenTelemetry Semantic Convention compatible files to find mismatches and suggestions. Compare all, or a limited set of your datasets, to find commonly used attributes that may benefit from being codified into Semantic Conventions.
 
 The output depends on the number of datasets provided and found for analysis. If a single dataset is analysed, then a csv comparison file is NOT produced (there's no other dataset to compare against!) Instead you will see output in the console like so:
 
 ```text
   Dataset  Match Miss  Bad  Score
   dataset3    28   11    2  68.3%
-  
+
               Column Suggestion
   aws.s3.bucket.name Missing  Extends aws.s3; Similar to aws.s3.bucket
              task.id Missing
@@ -26,7 +27,7 @@ If there is more that one dataset, the output is a csv file like so:
 | task.id            | string | Missing  |                                          | 2     | x        |          | x        |
 | TaskId             | string | Bad      | WrongCase; NoNamespace                   | 1     |          | x        |          |
 
-This example report is pointing out the follow:
+This example report is pointing out the following:
 
 - `aws.s3.bucket.name` has not been found in the provided semantic conventions. However, there is a namespace `aws.s3` that this attribute would extend. Also, there is an attribute in the model with a similar name: `aws.s3.bucket`. The application delivering to `dataset3` should have its instrumention adjusted to the standard.
 - `aws.s3.key` is in use by `dataset3` and matches a semantic convention in the provided models.
@@ -35,14 +36,19 @@ This example report is pointing out the follow:
 
 > **Note**
 >
-> Only datasets and attributes within them that have been written to in the last 60 days are retrieved for analysis.
+> Only datasets and attributes within them, that have been written to in the last 60 days, are retrieved for analysis.
 
 ## Building
 
-This will build the binary: `honey-health`
+honey-health is written in Rust, you'll need a
+[Rust installation](https://www.rust-lang.org/) to compile it:
 
 ```shell
-cargo build --release
+$ git clone https://github.com/jerbly/honey-health.git
+$ cd honey-health
+$ cargo build --release
+$ ./target/release/honey-health --version
+0.2.0
 ```
 
 ## Usage
