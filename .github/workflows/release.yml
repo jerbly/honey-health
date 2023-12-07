@@ -28,16 +28,18 @@ jobs:
         command: build
         args: --release
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Get the release version from the tag
+      if: env.VERSION == ''
+      run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+
+    - name: Show the version
+      run: |
+        echo "version is: $VERSION"
+
+    - name: Create GitHub release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
+      run: gh release create $VERSION --draft --verify-tag --title $VERSION
 
     - name: Upload Release Asset
       id: upload-release-asset 
