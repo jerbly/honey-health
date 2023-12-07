@@ -36,10 +36,16 @@ jobs:
       run: |
         echo "version is: $VERSION"
 
-    - name: Create GitHub release
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: gh release create $VERSION --draft --verify-tag --title $VERSION
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
 
     - name: Upload Release Asset
       id: upload-release-asset 
