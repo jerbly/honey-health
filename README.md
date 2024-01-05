@@ -36,7 +36,7 @@ This example report is pointing out the following:
 
 > **Note**
 >
-> Only datasets and attributes within them, that have been written to in the last 60 days, are retrieved for analysis.
+> Only datasets and attributes within them, that have been written to in the last 30 days, are retrieved for analysis. This can be overridden with the `--last-written-days` option.
 
 ## Building
 
