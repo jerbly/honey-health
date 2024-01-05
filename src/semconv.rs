@@ -158,7 +158,6 @@ impl SemanticConventions {
     }
 
     // Break up the namespace a.b.c into a, a.b, a.b.c and store them in the set
-    // TODO store this as a trie
     fn insert_prefixes(&mut self, input: &str) {
         let mut prefix = String::new();
         for c in input.chars() {

@@ -84,6 +84,7 @@ impl ColumnUsageMap {
     fn new(
         root_dirs: &[String],
         include_datasets: Option<HashSet<String>>,
+        max_last_written_days: usize,
     ) -> anyhow::Result<Self> {
         let sc = SemanticConventions::new(root_dirs)?;
 
@@ -103,7 +104,7 @@ impl ColumnUsageMap {
             .list_all_datasets()?
             .iter()
             .filter_map(|d| {
-                if (now - d.last_written_at).num_days() < 60 {
+                if (now - d.last_written_at).num_days() < max_last_written_days as i64 {
                     if inc_datasets.is_empty() || inc_datasets.contains(&d.slug) {
                         Some(d.slug.clone())
                     } else {
@@ -124,7 +125,7 @@ impl ColumnUsageMap {
             let mut dataset_health = DatasetHealth::new();
             for column in columns {
                 let duration = now - column.last_written;
-                if duration.num_days() < 60 {
+                if duration.num_days() < max_last_written_days as i64 {
                     let health: Suggestion;
                     if let Some(cu) = cm.map.get_mut(&column.key_name) {
                         cu.datasets[dataset_num] = true;
@@ -290,6 +291,13 @@ struct Args {
     /// used when more than one dataset is included.
     #[arg(short, long, default_value_t = String::from("hh_report.csv"))]
     output: String,
+
+    /// Max last written days
+    ///
+    /// The maximum number of days since a dataset was last written to. This
+    /// defaults to 30 days.
+    #[arg(short, long, default_value_t = 30)]
+    last_written_days: usize,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -309,7 +317,7 @@ fn main() -> anyhow::Result<()> {
         );
     }
     let include_datasets = args.dataset.map(HashSet::from_iter);
-    let cm = ColumnUsageMap::new(&root_dirs, include_datasets)?;
+    let cm = ColumnUsageMap::new(&root_dirs, include_datasets, args.last_written_days)?;
     if cm.datasets.is_empty() {
         println!("No datasets found");
         return Ok(());
@@ -321,9 +329,3 @@ fn main() -> anyhow::Result<()> {
     cm.print_dataset_report();
     Ok(())
 }
-
-// IDEAS
-// Store the namespace as a trie for searching
-// Provide command line to explore the trie to help find suitable namespaces and attribute names
-// Search for attributes with natural language
-// Generate a web page with a tree explorer across your semantic conventions

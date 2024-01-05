@@ -48,7 +48,7 @@ $ git clone https://github.com/jerbly/honey-health.git
 $ cd honey-health
 $ cargo build --release
 $ ./target/release/honey-health --version
-0.2.0
+0.3.0
 ```
 
 ## Usage
@@ -59,11 +59,12 @@ Honey Health
 Usage: honey-health [OPTIONS] --model <MODEL>...
 
 Options:
-  -m, --model <MODEL>...        Model paths
-  -d, --dataset [<DATASET>...]  Datasets
-  -o, --output <OUTPUT>         Output file path [default: hh_report.csv]
-  -h, --help                    Print help (see more with '--help')
-  -V, --version                 Print version
+  -m, --model <MODEL>...                       Model paths
+  -d, --dataset [<DATASET>...]                 Datasets
+  -o, --output <OUTPUT>                        Output file path [default: hh_report.csv]
+  -l, --last-written-days <LAST_WRITTEN_DAYS>  Max last written days [default: 30]
+  -h, --help                                   Print help (see more with '--help')
+  -V, --version                                Print version
 ```
 
 You must provide `HONEYCOMB_API_KEY` as an environment variable or in a `.env` file. This api key must have access to read datasets and columns.
