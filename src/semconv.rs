@@ -64,10 +64,31 @@ impl Display for SuggestionComment {
     }
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct ComplexType {}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum Type {
+    Simple(String),
+    Complex(ComplexType),
+}
+
 #[derive(Debug, Deserialize)]
 struct Attribute {
     id: Option<String>,
+    r#type: Option<Type>,
     brief: Option<String>,
+}
+
+impl Attribute {
+    fn is_template(&self) -> bool {
+        if let Some(Type::Simple(r#type)) = &self.r#type {
+            r#type.starts_with("template")
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +107,7 @@ pub struct SemanticConventions {
     // Have a map of constructed-attribute-name as key, to, brief as value
     pub attribute_map: HashMap<String, String>,
     pub prefixes: HashSet<String>,
+    pub templates: HashSet<String>,
 }
 
 impl SemanticConventions {
@@ -93,6 +115,7 @@ impl SemanticConventions {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
+            templates: HashSet::new(),
         };
         sc.populate_builtins();
         for root_dir in root_dirs {
@@ -137,10 +160,16 @@ impl SemanticConventions {
         for group in groups.groups {
             if let (Some(prefix), Some(attributes)) = (group.prefix, group.attributes) {
                 for attribute in attributes {
+                    let is_template = attribute.is_template();
                     if let (Some(id), Some(brief)) = (attribute.id, attribute.brief) {
-                        self.attribute_map
-                            .insert(format!("{}.{}", prefix, id), brief.trim().to_owned());
-                        self.insert_prefixes(&prefix);
+                        let attribute_name = format!("{}.{}", prefix, id);
+                        if is_template {
+                            self.templates.insert(attribute_name.clone());
+                        } else {
+                            self.attribute_map
+                                .insert(attribute_name, brief.trim().to_owned());
+                            self.insert_prefixes(&prefix);
+                        }
                     }
                 }
             }
@@ -201,10 +230,18 @@ impl SemanticConventions {
         }
     }
 
+    fn matches_template(&self, name: &str) -> bool {
+        if let Some((input, _)) = name.rsplit_once('.') {
+            self.templates.contains(input)
+        } else {
+            false
+        }
+    }
+
     /// Given the input attribute name, make an improvement suggestion.
     pub fn get_suggestion(&self, name: &str) -> Suggestion {
         // Is this already a semantic convention
-        if self.attribute_map.contains_key(name) {
+        if self.attribute_map.contains_key(name) || self.matches_template(name) {
             Suggestion::Matching
         } else {
             let mut bad = false;
@@ -242,6 +279,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
+            templates: HashSet::new(),
         };
         sc.populate_builtins();
         assert!(sc.attribute_map.contains_key("duration_ms"));
@@ -259,6 +297,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
+            templates: HashSet::new(),
         };
         sc.insert_prefixes("a.b.c");
         assert!(sc.prefixes.contains("a"));
@@ -271,6 +310,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
+            templates: HashSet::new(),
         };
         sc.insert_prefixes("a.b.c");
         assert_eq!(sc.prefix_exists("a.b.c.d"), Some("a.b.c".to_string()));
@@ -283,6 +323,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
+            templates: HashSet::new(),
         };
         sc.attribute_map.insert("test".to_string(), "".to_string());
         assert_eq!(sc.similar("test"), Some(vec!["test".to_string()]));
