@@ -12,7 +12,7 @@ const HONEYCOMB_API_KEY: &str = "HONEYCOMB_API_KEY";
 #[derive(Debug, Deserialize)]
 pub struct Dataset {
     pub slug: String,
-    pub last_written_at: DateTime<Utc>,
+    pub last_written_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -33,19 +33,37 @@ impl HoneyComb {
         }
     }
     pub fn list_all_datasets(&self) -> anyhow::Result<Vec<Dataset>> {
-        let response = reqwest::blocking::Client::new()
+        let client = reqwest::blocking::Client::new();
+        let response = client
             .get(format!("{}datasets", URL))
             .header("X-Honeycomb-Team", &self.api_key)
-            .send()?
-            .json::<Vec<Dataset>>()?;
-        Ok(response)
+            .send()?;
+
+        let text = response.text()?;
+
+        match serde_json::from_str::<Vec<Dataset>>(&text) {
+            Ok(datasets) => Ok(datasets),
+            Err(_) => {
+                println!("Invalid JSON data: {}", text);
+                Err(anyhow::anyhow!("Invalid JSON data"))
+            }
+        }
     }
     pub fn list_all_columns(&self, dataset_slug: &str) -> anyhow::Result<Vec<Column>> {
-        let response = reqwest::blocking::Client::new()
+        let client = reqwest::blocking::Client::new();
+        let response = client
             .get(format!("{}columns/{}", URL, dataset_slug))
             .header("X-Honeycomb-Team", &self.api_key)
-            .send()?
-            .json::<Vec<Column>>()?;
-        Ok(response)
+            .send()?;
+
+        let text = response.text()?;
+
+        match serde_json::from_str::<Vec<Column>>(&text) {
+            Ok(columns) => Ok(columns),
+            Err(_) => {
+                println!("Invalid JSON data: {}", text);
+                Err(anyhow::anyhow!("Invalid JSON data"))
+            }
+        }
     }
 }

@@ -104,7 +104,9 @@ impl ColumnUsageMap {
             .list_all_datasets()?
             .iter()
             .filter_map(|d| {
-                if (now - d.last_written_at).num_days() < max_last_written_days as i64 {
+                if (now - d.last_written_at.unwrap_or(Utc::now())).num_days()
+                    < max_last_written_days as i64
+                {
                     if inc_datasets.is_empty() || inc_datasets.contains(&d.slug) {
                         Some(d.slug.clone())
                     } else {
@@ -117,7 +119,7 @@ impl ColumnUsageMap {
             .collect::<Vec<_>>();
         datasets.sort();
         cm.datasets = datasets;
-        eprint!("Reading datasets ");
+        eprint!("Reading {} datasets ", cm.datasets.len());
         for (dataset_num, dataset_slug) in cm.datasets.iter().enumerate() {
             //println!("Reading dataset: {}", dataset_slug);
             eprint!(".");
