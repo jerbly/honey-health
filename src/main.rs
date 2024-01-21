@@ -1,4 +1,3 @@
-mod honeycomb;
 mod semconv;
 
 use std::{
@@ -9,10 +8,9 @@ use std::{
 };
 
 use anyhow::{Context, Ok};
-use chrono::Utc;
 use clap::Parser;
 use colored::Colorize;
-use honeycomb::{Column, HoneyComb};
+use honeycomb_client::honeycomb::Column;
 use semconv::{SemanticConventions, Suggestion};
 
 // For each dataset get all the columns and put them in a map of column_name -> ColumnUsage
@@ -81,7 +79,7 @@ struct ColumnUsageMap {
 }
 
 impl ColumnUsageMap {
-    fn new(
+    async fn new(
         root_dirs: &[String],
         include_datasets: Option<HashSet<String>>,
         max_last_written_days: usize,
@@ -94,65 +92,51 @@ impl ColumnUsageMap {
             dataset_health: vec![],
             semconv: sc,
         };
-        let hc = HoneyComb::new();
-        let now = Utc::now();
-        let inc_datasets = match include_datasets {
-            Some(d) => d,
-            None => HashSet::new(),
+        let hc = match honeycomb_client::get_honeycomb(&["columns", "createDatasets"]).await? {
+            Some(hclient) => hclient,
+            None => {
+                anyhow::bail!("API key does not have required access");
+            }
         };
-        let mut datasets = hc
-            .list_all_datasets()?
-            .iter()
-            .filter_map(|d| {
-                if (now - d.last_written_at.unwrap_or(Utc::now())).num_days()
-                    < max_last_written_days as i64
-                {
-                    if inc_datasets.is_empty() || inc_datasets.contains(&d.slug) {
-                        Some(d.slug.clone())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        datasets.sort();
-        cm.datasets = datasets;
+
+        let dataset_slugs = hc
+            .get_dataset_slugs(max_last_written_days as i64, include_datasets)
+            .await?;
+
+        cm.datasets = dataset_slugs;
         eprint!("Reading {} datasets ", cm.datasets.len());
-        for (dataset_num, dataset_slug) in cm.datasets.iter().enumerate() {
-            //println!("Reading dataset: {}", dataset_slug);
+        let mut dataset_num = 0;
+        hc.process_datasets_columns(max_last_written_days as i64, &cm.datasets, |_, columns| {
             eprint!(".");
-            let columns = hc.list_all_columns(dataset_slug)?;
             let mut dataset_health = DatasetHealth::new();
             for column in columns {
-                let duration = now - column.last_written;
-                if duration.num_days() < max_last_written_days as i64 {
-                    let health: Suggestion;
-                    if let Some(cu) = cm.map.get_mut(&column.key_name) {
-                        cu.datasets[dataset_num] = true;
-                        health = cu.suggestion.clone();
-                    } else {
-                        let key_name = column.key_name.clone();
-                        let suggestion = cm.semconv.get_suggestion(&key_name);
-                        let cu = ColumnUsage::new(
-                            column,
-                            suggestion.clone(),
-                            cm.datasets.len(),
-                            dataset_num,
-                        );
-                        cm.map.insert(key_name, cu);
-                        health = suggestion;
-                    }
-                    match health {
-                        Suggestion::Matching => dataset_health.matching += 1,
-                        Suggestion::Missing(_) => dataset_health.missing += 1,
-                        _ => dataset_health.bad += 1,
-                    }
+                let health: Suggestion;
+                if let Some(cu) = cm.map.get_mut(&column.key_name) {
+                    cu.datasets[dataset_num] = true;
+                    health = cu.suggestion.clone();
+                } else {
+                    let key_name = column.key_name.clone();
+                    let suggestion = cm.semconv.get_suggestion(&key_name);
+                    let cu = ColumnUsage::new(
+                        column,
+                        suggestion.clone(),
+                        cm.datasets.len(),
+                        dataset_num,
+                    );
+                    cm.map.insert(key_name, cu);
+                    health = suggestion;
+                }
+                match health {
+                    Suggestion::Matching => dataset_health.matching += 1,
+                    Suggestion::Missing(_) => dataset_health.missing += 1,
+                    _ => dataset_health.bad += 1,
                 }
             }
             cm.dataset_health.push(dataset_health);
-        }
+            dataset_num += 1;
+        })
+        .await?;
+
         eprintln!();
         Ok(cm)
     }
@@ -302,7 +286,8 @@ struct Args {
     last_written_days: usize,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let args = Args::parse();
     let mut root_dirs = vec![];
@@ -319,7 +304,7 @@ fn main() -> anyhow::Result<()> {
         );
     }
     let include_datasets = args.dataset.map(HashSet::from_iter);
-    let cm = ColumnUsageMap::new(&root_dirs, include_datasets, args.last_written_days)?;
+    let cm = ColumnUsageMap::new(&root_dirs, include_datasets, args.last_written_days).await?;
     if cm.datasets.is_empty() {
         println!("No datasets found");
         return Ok(());

@@ -1,6 +1,6 @@
 [package]
 name = "honey-health"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["Jeremy Blythe <jeremyblythe@gmail.com>"]
 
@@ -8,14 +8,12 @@ authors = ["Jeremy Blythe <jeremyblythe@gmail.com>"]
 
 [dependencies]
 anyhow = "1.0.72"
-chrono = { version = "0.4.26", features = ["serde"] }
 clap = { version = "4.4.8", features = ["derive"] }
 colored = "2.0.4"
 dotenv = "0.15.0"
 glob = "0.3.1"
-openssl = { version = "0.10.61", features = ["vendored"] }
-reqwest = { version = "0.11.18", features = ["blocking", "json"] }
+honeycomb-client = { git = "https://github.com/jerbly/honeycomb-client", tag = "v0.1.1" }
 serde = { version = "1.0.183", features = ["derive"] }
-serde_json = "1.0.104"
 serde_yaml = "0.9.25"
 strsim = "0.10.0"
+tokio = { version = "1.35.1", features = ["full"] }
