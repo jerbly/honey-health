@@ -40,10 +40,13 @@ This example report is pointing out the following:
 >
 > Only datasets and attributes within them, that have been written to in the last 30 days, are retrieved for analysis. This can be overridden with the `--last-written-days` option.
 
+## Installing
+
+[Follow the instructions on the release page.](https://github.com/jerbly/honey-health/releases) There are installers of pre-built binaries for popular OSes.
+
 ## Building
 
-honey-health is written in Rust, you'll need a
-[Rust installation](https://www.rust-lang.org/) to compile it:
+If you really want to build from source and not use a [pre-built binary release](https://github.com/jerbly/honey-health/releases) then firstly you'll need a [Rust installation](https://www.rust-lang.org/) to compile it, then:
 
 ```shell
 $ git clone https://github.com/jerbly/honey-health.git
