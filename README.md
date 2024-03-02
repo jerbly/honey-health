@@ -4,7 +4,7 @@ Generates reports on the health of your [Honeycomb](https://honeycomb.io) datase
 
 Provide it with OpenTelemetry Semantic Convention compatible files to find mismatches and suggestions. Compare all, or a limited set of your datasets, to find commonly used attributes that may benefit from being codified into Semantic Conventions.
 
-The output depends on the number of datasets provided and found for analysis. If a single dataset is analysed, then a csv comparison file is NOT produced (there's no other dataset to compare against!) Instead you will see output in the console like so:
+The output depends on the number of datasets provided and found for analysis. If a single dataset is analyzed, then a csv comparison file is NOT produced (there's no other dataset to compare against!) Instead you will see output in the console like so:
 
 ```text
   Dataset  Match Miss  Bad  Score
@@ -15,6 +15,8 @@ The output depends on the number of datasets provided and found for analysis. If
              task.id Missing
               TaskId Bad      WrongCase; NoNamespace  
 ```
+
+For single datasets you can also use the `-e` or `--enums` switch. This compares enum variants defined in semantic conventions with discovered variants used in tracing. Additional variants will be reported. If the attribute's enum definition has `allow_custom_values` set `true`, this is an _open enum_ and additional variants are "allowed". Honey-health still reports additional variants but as a warning (highlighted in yellow).
 
 You will always see the top section showing the number of Matching, Missing and Bad attributes. The Score is the proportion of Matching attributes (those which have defined Semantic Conventions).
 
@@ -29,9 +31,9 @@ If there is more that one dataset, the output is a csv file like so:
 
 This example report is pointing out the following:
 
-- `aws.s3.bucket.name` has not been found in the provided semantic conventions. However, there is a namespace `aws.s3` that this attribute would extend. Also, there is an attribute in the model with a similar name: `aws.s3.bucket`. The application delivering to `dataset3` should have its instrumention adjusted to the standard.
+- `aws.s3.bucket.name` has not been found in the provided semantic conventions. However, there is a namespace `aws.s3` that this attribute would extend. Also, there is an attribute in the model with a similar name: `aws.s3.bucket`. The application delivering to `dataset3` should have its instrumentation adjusted to the standard.
 - `aws.s3.key` is in use by `dataset3` and matches a semantic convention in the provided models.
-- `task.id` is missing from the provided model but is used by 2 datasets: `dataset1` and `dataset3`. Perhaps this is a good candidate to standardise into your own semantic conventions?
+- `task.id` is missing from the provided model but is used by 2 datasets: `dataset1` and `dataset3`. Perhaps this is a good candidate to standardize into your own semantic conventions?
 - `TaskId` is in CamelCase which does not follow the recommended standard for attribute naming. Also, this is a top-level name with no namespace - this will pollute the namespace tree.
 
 > **Note**
@@ -48,7 +50,7 @@ $ git clone https://github.com/jerbly/honey-health.git
 $ cd honey-health
 $ cargo build --release
 $ ./target/release/honey-health --version
-0.3.0
+0.4.0
 ```
 
 ## Usage
@@ -63,6 +65,7 @@ Options:
   -d, --dataset [<DATASET>...]                 Datasets
   -o, --output <OUTPUT>                        Output file path [default: hh_report.csv]
   -l, --last-written-days <LAST_WRITTEN_DAYS>  Max last written days [default: 30]
+  -e, --enums                                  Enum check
   -h, --help                                   Print help (see more with '--help')
   -V, --version                                Print version
 ```

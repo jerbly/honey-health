@@ -11,6 +11,7 @@ use anyhow::{Context, Ok};
 use clap::Parser;
 use colored::Colorize;
 use honeycomb_client::honeycomb::Column;
+use indicatif::ProgressBar;
 use semconv::{SemanticConventions, Suggestion};
 
 // For each dataset get all the columns and put them in a map of column_name -> ColumnUsage
@@ -92,22 +93,26 @@ impl ColumnUsageMap {
             dataset_health: vec![],
             semconv: sc,
         };
-        let hc = match honeycomb_client::get_honeycomb(&["columns", "createDatasets"]).await? {
-            Some(hclient) => hclient,
-            None => {
-                anyhow::bail!("API key does not have required access");
-            }
-        };
+        let hc = honeycomb_client::get_honeycomb(&["columns", "createDatasets"])
+            .await?
+            .context("API key does not have required access")?;
 
         let dataset_slugs = hc
             .get_dataset_slugs(max_last_written_days as i64, include_datasets)
             .await?;
 
         cm.datasets = dataset_slugs;
-        eprint!("Reading {} datasets ", cm.datasets.len());
+        let bar = ProgressBar::new(cm.datasets.len() as u64)
+            .with_style(
+                indicatif::ProgressStyle::default_bar()
+                    .template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                    .unwrap(),
+            )
+            .with_message("Reading datasets...");
+        bar.inc(0);
         let mut dataset_num = 0;
         hc.process_datasets_columns(max_last_written_days as i64, &cm.datasets, |_, columns| {
-            eprint!(".");
+            bar.inc(1);
             let mut dataset_health = DatasetHealth::new();
             for column in columns {
                 let health: Suggestion;
@@ -137,7 +142,7 @@ impl ColumnUsageMap {
         })
         .await?;
 
-        eprintln!();
+        bar.finish_and_clear();
         Ok(cm)
     }
 
@@ -207,41 +212,42 @@ impl ColumnUsageMap {
 
     fn print_dataset_report(&self) {
         // If there's only one dataset, print the columns that are not matching
-        if self.datasets.len() == 1 {
-            let mut columns = self.map.values().collect::<Vec<_>>();
-            let longest = "Column".len().max(
-                columns
-                    .iter()
-                    .map(|c| c.column.key_name.len())
-                    .max()
-                    .unwrap_or(0),
-            );
-            columns.sort_by(|a, b| a.column.key_name.cmp(&b.column.key_name));
-            println!(
-                "\n{:>width$} {}",
-                "Column".bold(),
-                "Suggestion".bold(),
-                width = longest
-            );
-            for c in columns {
-                match c.suggestion {
-                    Suggestion::Matching => {}
-                    Suggestion::Missing(_) => {
-                        println!(
-                            "{:>width$} {}",
-                            c.column.key_name.yellow(),
-                            c.suggestion,
-                            width = longest
-                        );
-                    }
-                    _ => {
-                        println!(
-                            "{:>width$} {}",
-                            c.column.key_name.red(),
-                            c.suggestion,
-                            width = longest
-                        );
-                    }
+        if self.datasets.len() != 1 {
+            return;
+        }
+        let mut columns = self.map.values().collect::<Vec<_>>();
+        let longest = "Column".len().max(
+            columns
+                .iter()
+                .map(|c| c.column.key_name.len())
+                .max()
+                .unwrap_or(0),
+        );
+        columns.sort_by(|a, b| a.column.key_name.cmp(&b.column.key_name));
+        println!(
+            "\n{:>width$} {}",
+            "Column".bold(),
+            "Suggestion".bold(),
+            width = longest
+        );
+        for c in columns {
+            match c.suggestion {
+                Suggestion::Matching => {}
+                Suggestion::Missing(_) => {
+                    println!(
+                        "{:>width$} {}",
+                        c.column.key_name.yellow(),
+                        c.suggestion,
+                        width = longest
+                    );
+                }
+                _ => {
+                    println!(
+                        "{:>width$} {}",
+                        c.column.key_name.red(),
+                        c.suggestion,
+                        width = longest
+                    );
                 }
             }
         }
@@ -249,81 +255,83 @@ impl ColumnUsageMap {
 
     async fn print_enum_report(&self) -> anyhow::Result<()> {
         // If there's only one dataset, print the enum comparisons
-        if self.datasets.len() == 1 {
-            let hc =
-                match honeycomb_client::get_honeycomb(&["columns", "createDatasets", "queries"])
-                    .await?
-                {
-                    Some(hclient) => hclient,
-                    None => {
-                        anyhow::bail!("API key does not have required access");
-                    }
-                };
+        if self.datasets.len() != 1 {
+            return Ok(());
+        }
 
-            let mut columns = self.map.values().collect::<Vec<_>>();
-            let longest = "Column".len().max(
-                columns
-                    .iter()
-                    .map(|c| c.column.key_name.len())
-                    .max()
-                    .unwrap_or(0),
-            );
+        let mut columns = self.map.values().collect::<Vec<_>>();
+        let longest = "Column".len().max(
+            columns
+                .iter()
+                .map(|c| c.column.key_name.len())
+                .max()
+                .unwrap_or(0),
+        );
 
-            println!(
-                "\n{:>width$} {}",
-                "Column".bold(),
-                "Undefined-variants".bold(),
-                width = longest
-            );
-
-            columns.retain(|c| {
-                if c.suggestion == Suggestion::Matching {
-                    if let Some(Some(a)) = self.semconv.attribute_map.get(&c.column.key_name) {
-                        if let Some(semconv::Type::Complex(_)) = &a.r#type {
-                            return true;
-                        }
+        columns.retain(|c| {
+            if c.suggestion == Suggestion::Matching {
+                if let Some(Some(a)) = self.semconv.attribute_map.get(&c.column.key_name) {
+                    if let Some(semconv::Type::Complex(_)) = &a.r#type {
+                        return true;
                     }
                 }
-                false
-            });
+            }
+            false
+        });
 
-            let column_ids = columns
-                .iter()
-                .map(|c| c.column.key_name.clone())
-                .collect::<Vec<_>>();
+        if columns.is_empty() {
+            println!("\nNo columns with enum types");
+            return Ok(());
+        }
 
-            let mut results = hc
-                .get_all_group_by_variants(&self.datasets[0], &column_ids)
-                .await?;
-            results.sort();
+        let column_ids = columns
+            .iter()
+            .map(|c| c.column.key_name.clone())
+            .collect::<Vec<_>>();
 
-            for (c, mut found_variants) in results {
-                if let Some(Some(a)) = self.semconv.attribute_map.get(&c) {
-                    if let Some(semconv::Type::Complex(atype)) = &a.r#type {
-                        let defined_variants = atype.get_simple_variants();
-                        // remove all defined enums from found_enums
-                        found_variants.retain(|e| !defined_variants.contains(e));
-                        if found_variants.is_empty() {
-                            println!("{:>width$}", c.green(), width = longest);
-                        } else if atype.allow_custom_values {
-                            println!(
-                                "{:>width$} {}",
-                                c.yellow(),
-                                found_variants.join(", "),
-                                width = longest
-                            );
-                        } else {
-                            println!(
-                                "{:>width$} {}",
-                                c.red(),
-                                found_variants.join(", "),
-                                width = longest
-                            );
-                        }
+        let hc = honeycomb_client::get_honeycomb(&["columns", "createDatasets", "queries"])
+            .await?
+            .context("API key does not have required access")?;
+
+        let mut results = hc
+            .get_all_group_by_variants(&self.datasets[0], &column_ids)
+            .await?;
+        results.sort();
+
+        println!(
+            "\n{:>width$} {}",
+            "Column".bold(),
+            "Undefined-variants".bold(),
+            width = longest
+        );
+
+        for (c, mut found_variants) in results {
+            if let Some(Some(a)) = self.semconv.attribute_map.get(&c) {
+                if let Some(semconv::Type::Complex(atype)) = &a.r#type {
+                    let defined_variants = atype.get_simple_variants();
+                    // remove all defined enums from found_enums
+                    found_variants.retain(|e| !defined_variants.contains(e));
+                    if found_variants.is_empty() {
+                        println!("{:>width$}", c.green(), width = longest);
+                    } else if atype.allow_custom_values {
+                        println!(
+                            "{:>width$} {}",
+                            c.yellow(),
+                            found_variants.join(", "),
+                            width = longest
+                        );
+                    } else {
+                        println!(
+                            "{:>width$} {}",
+                            c.red(),
+                            found_variants.join(", "),
+                            width = longest
+                        );
                     }
                 }
             }
         }
+
         Ok(())
     }
 }

@@ -1,3 +1,8 @@
+# 0.4.0
+
+- For single datasets you can now use the `-e` or `--enums` switch. This compares enum variants defined in semantic conventions with discovered variants used in tracing. Additional variants will be reported. If the attribute's enum definition has `allow_custom_values` set `true`, this is an _open enum_ and additional variants are "allowed". Honey-health still reports additional variants but as a warning (highlighted in yellow).
+- Added progress bars. Some Honeycomb operations can take a while so this provides better feedback.
+
 # 0.3.4
 
 - Uses `cargo-dist` for build and release.
