@@ -246,6 +246,86 @@ impl ColumnUsageMap {
             }
         }
     }
+
+    async fn print_enum_report(&self) -> anyhow::Result<()> {
+        // If there's only one dataset, print the enum comparisons
+        if self.datasets.len() == 1 {
+            let hc =
+                match honeycomb_client::get_honeycomb(&["columns", "createDatasets", "queries"])
+                    .await?
+                {
+                    Some(hclient) => hclient,
+                    None => {
+                        anyhow::bail!("API key does not have required access");
+                    }
+                };
+
+            let mut columns = self.map.values().collect::<Vec<_>>();
+            let longest = "Column".len().max(
+                columns
+                    .iter()
+                    .map(|c| c.column.key_name.len())
+                    .max()
+                    .unwrap_or(0),
+            );
+
+            println!(
+                "\n{:>width$} {}",
+                "Column".bold(),
+                "Undefined-variants".bold(),
+                width = longest
+            );
+
+            columns.retain(|c| {
+                if c.suggestion == Suggestion::Matching {
+                    if let Some(Some(a)) = self.semconv.attribute_map.get(&c.column.key_name) {
+                        if let Some(semconv::Type::Complex(_)) = &a.r#type {
+                            return true;
+                        }
+                    }
+                }
+                false
+            });
+
+            let column_ids = columns
+                .iter()
+                .map(|c| c.column.key_name.clone())
+                .collect::<Vec<_>>();
+
+            let mut results = hc
+                .get_all_group_by_variants(&self.datasets[0], &column_ids)
+                .await?;
+            results.sort();
+
+            for (c, mut found_variants) in results {
+                if let Some(Some(a)) = self.semconv.attribute_map.get(&c) {
+                    if let Some(semconv::Type::Complex(atype)) = &a.r#type {
+                        let defined_variants = atype.get_simple_variants();
+                        // remove all defined enums from found_enums
+                        found_variants.retain(|e| !defined_variants.contains(e));
+                        if found_variants.is_empty() {
+                            println!("{:>width$}", c.green(), width = longest);
+                        } else if atype.allow_custom_values {
+                            println!(
+                                "{:>width$} {}",
+                                c.yellow(),
+                                found_variants.join(", "),
+                                width = longest
+                            );
+                        } else {
+                            println!(
+                                "{:>width$} {}",
+                                c.red(),
+                                found_variants.join(", "),
+                                width = longest
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -284,6 +364,12 @@ struct Args {
     /// defaults to 30 days.
     #[arg(short, long, default_value_t = 30)]
     last_written_days: usize,
+
+    /// Enum check
+    ///
+    /// Check the enum values in the dataset.
+    #[arg(short, long, default_value_t = false)]
+    enums: bool,
 }
 
 #[tokio::main]
@@ -314,5 +400,8 @@ async fn main() -> anyhow::Result<()> {
     }
     cm.print_health();
     cm.print_dataset_report();
+    if args.enums {
+        cm.print_enum_report().await?;
+    }
     Ok(())
 }

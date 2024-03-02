@@ -2,7 +2,7 @@ use glob::glob;
 use serde::Deserialize;
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::{Display, Formatter},
     fs::File,
     path::PathBuf,
 };
@@ -65,7 +65,41 @@ impl Display for SuggestionComment {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct ComplexType {}
+#[serde(untagged)]
+pub enum MemberValue {
+    StringType(String),
+    IntegerType(i64),
+}
+
+impl Display for MemberValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemberValue::StringType(s) => write!(f, "{}", s),
+            MemberValue::IntegerType(i) => write!(f, "{}", i),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Member {
+    pub value: MemberValue,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ComplexType {
+    #[serde(default)]
+    pub allow_custom_values: bool,
+    pub members: Vec<Member>,
+}
+
+impl ComplexType {
+    pub fn get_simple_variants(&self) -> Vec<String> {
+        self.members
+            .iter()
+            .map(|member| member.value.to_string().trim().to_string())
+            .collect()
+    }
+}
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
@@ -75,10 +109,9 @@ pub enum Type {
 }
 
 #[derive(Debug, Deserialize)]
-struct Attribute {
-    id: Option<String>,
-    r#type: Option<Type>,
-    brief: Option<String>,
+pub struct Attribute {
+    pub id: Option<String>,
+    pub r#type: Option<Type>,
 }
 
 impl Attribute {
@@ -105,7 +138,7 @@ struct Groups {
 #[derive(Debug)]
 pub struct SemanticConventions {
     // Have a map of constructed-attribute-name as key, to, brief as value
-    pub attribute_map: HashMap<String, String>,
+    pub attribute_map: HashMap<String, Option<Attribute>>,
     pub prefixes: HashSet<String>,
     pub templates: HashSet<String>,
 }
@@ -146,7 +179,7 @@ impl SemanticConventions {
             "error",
         ];
         for builtin in builtins {
-            self.attribute_map.insert(builtin.to_owned(), "".to_owned());
+            self.attribute_map.insert(builtin.to_owned(), None);
         }
         let builtin_prefixes = ["meta", "span", "trace"];
         for builtin_prefix in builtin_prefixes {
@@ -161,13 +194,12 @@ impl SemanticConventions {
             if let (Some(prefix), Some(attributes)) = (group.prefix, group.attributes) {
                 for attribute in attributes {
                     let is_template = attribute.is_template();
-                    if let (Some(id), Some(brief)) = (attribute.id, attribute.brief) {
+                    if let Some(id) = &attribute.id {
                         let attribute_name = format!("{}.{}", prefix, id);
                         if is_template {
                             self.templates.insert(attribute_name.clone());
                         } else {
-                            self.attribute_map
-                                .insert(attribute_name, brief.trim().to_owned());
+                            self.attribute_map.insert(attribute_name, Some(attribute));
                             self.insert_prefixes(&prefix);
                         }
                     }
@@ -325,7 +357,7 @@ mod tests {
             prefixes: HashSet::new(),
             templates: HashSet::new(),
         };
-        sc.attribute_map.insert("test".to_string(), "".to_string());
+        sc.attribute_map.insert("test".to_string(), None);
         assert_eq!(sc.similar("test"), Some(vec!["test".to_string()]));
         assert_eq!(sc.similar("x"), None);
     }

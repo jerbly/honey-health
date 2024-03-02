@@ -1,6 +1,6 @@
 [package]
 name = "honey-health"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2021"
 authors = ["Jeremy Blythe <jeremyblythe@gmail.com>"]
 repository = "https://github.com/jerbly/honey-health"
@@ -8,16 +8,17 @@ repository = "https://github.com/jerbly/honey-health"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.72"
-clap = { version = "4.4.8", features = ["derive"] }
-colored = "2.0.4"
+anyhow = "1.0.80"
+clap = { version = "4.5.1", features = ["derive"] }
+colored = "2.1.0"
 dotenv = "0.15.0"
 glob = "0.3.1"
-honeycomb-client = { git = "https://github.com/jerbly/honeycomb-client", tag = "v0.1.1" }
-serde = { version = "1.0.183", features = ["derive"] }
-serde_yaml = "0.9.25"
-strsim = "0.10.0"
-tokio = { version = "1.35.1", features = ["full"] }
+#honeycomb-client = { git = "https://github.com/jerbly/honeycomb-client", tag = "v0.2.0" }
+honeycomb-client = { path = "../honeycomb-client" }
+serde = { version = "1.0.197", features = ["derive"] }
+serde_yaml = "0.9.32"
+strsim = "0.11.0"
+tokio = { version = "1.36.0", features = ["full"] }
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
@@ -27,7 +28,7 @@ lto = "thin"
 # Config for 'cargo dist'
 [workspace.metadata.dist]
 # The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.8.0"
+cargo-dist-version = "0.11.1"
 # CI backends to support
 ci = ["github"]
 # The installers to generate for each app
