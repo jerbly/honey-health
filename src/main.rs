@@ -210,7 +210,7 @@ impl ColumnUsageMap {
         }
     }
 
-    fn print_dataset_report(&self) {
+    fn print_dataset_report(&self, show_matches: bool) {
         // If there's only one dataset, print the columns that are not matching
         if self.datasets.len() != 1 {
             return;
@@ -232,7 +232,11 @@ impl ColumnUsageMap {
         );
         for c in columns {
             match c.suggestion {
-                Suggestion::Matching => {}
+                Suggestion::Matching => {
+                    if show_matches {
+                        println!("{:>width$}", c.column.key_name.green(), width = longest);
+                    }
+                }
                 Suggestion::Missing(_) => {
                     println!(
                         "{:>width$} {}",
@@ -378,6 +382,12 @@ struct Args {
     /// Check the enum values in the dataset.
     #[arg(short, long, default_value_t = false)]
     enums: bool,
+
+    /// Show matches
+    ///
+    /// Show all matching attributes when analyzing a single dataset.
+    #[arg(short, long, default_value_t = false)]
+    show_matches: bool,
 }
 
 #[tokio::main]
@@ -407,7 +417,7 @@ async fn main() -> anyhow::Result<()> {
         cm.to_csv(&args.output)?;
     }
     cm.print_health();
-    cm.print_dataset_report();
+    cm.print_dataset_report(args.show_matches);
     if args.enums {
         cm.print_enum_report().await?;
     }

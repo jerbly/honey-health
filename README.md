@@ -53,7 +53,7 @@ $ git clone https://github.com/jerbly/honey-health.git
 $ cd honey-health
 $ cargo build --release
 $ ./target/release/honey-health --version
-0.4.0
+0.4.1
 ```
 
 ## Usage
@@ -69,6 +69,7 @@ Options:
   -o, --output <OUTPUT>                        Output file path [default: hh_report.csv]
   -l, --last-written-days <LAST_WRITTEN_DAYS>  Max last written days [default: 30]
   -e, --enums                                  Enum check
+  -s, --show-matches                           Show matches
   -h, --help                                   Print help (see more with '--help')
   -V, --version                                Print version
 ```
