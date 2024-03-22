@@ -49,6 +49,7 @@ pub enum SuggestionComment {
     WrongCase,
     Similar(Vec<String>),
     Extends(String),
+    Deprecated(String),
     //DeepNamespace, // TODO if the namespace is deep, it could indicate encoding a code path
     NoNamespace,
 }
@@ -60,6 +61,7 @@ impl Display for SuggestionComment {
             SuggestionComment::NoNamespace => write!(f, "NoNamespace"),
             SuggestionComment::Similar(v) => write!(f, "Similar to {}", v.join(" ")),
             SuggestionComment::Extends(s) => write!(f, "Extends {}", s),
+            SuggestionComment::Deprecated(s) => write!(f, "Deprecated: {}", s),
         }
     }
 }
@@ -112,6 +114,7 @@ pub enum Type {
 pub struct Attribute {
     pub id: Option<String>,
     pub r#type: Option<Type>,
+    pub deprecated: Option<String>,
 }
 
 impl Attribute {
@@ -137,10 +140,10 @@ struct Groups {
 
 #[derive(Debug)]
 pub struct SemanticConventions {
-    // Have a map of constructed-attribute-name as key, to, brief as value
+    // Have a map of constructed-attribute-name as key, to, attribute as value
     pub attribute_map: HashMap<String, Option<Attribute>>,
     pub prefixes: HashSet<String>,
-    pub templates: HashSet<String>,
+    pub templates: HashMap<String, Option<Attribute>>,
 }
 
 impl SemanticConventions {
@@ -148,7 +151,7 @@ impl SemanticConventions {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
-            templates: HashSet::new(),
+            templates: HashMap::new(),
         };
         sc.populate_builtins();
         for root_dir in root_dirs {
@@ -197,11 +200,11 @@ impl SemanticConventions {
                     if let Some(id) = &attribute.id {
                         let attribute_name = format!("{}.{}", prefix, id);
                         if is_template {
-                            self.templates.insert(attribute_name.clone());
+                            self.templates.insert(attribute_name, Some(attribute));
                         } else {
                             self.attribute_map.insert(attribute_name, Some(attribute));
-                            self.insert_prefixes(&prefix);
                         }
+                        self.insert_prefixes(&prefix);
                     }
                 }
             }
@@ -262,19 +265,39 @@ impl SemanticConventions {
         }
     }
 
-    fn matches_template(&self, name: &str) -> bool {
+    fn matches_template(&self, name: &str) -> Option<&Attribute> {
         if let Some((input, _)) = name.rsplit_once('.') {
-            self.templates.contains(input)
+            if let Some(attribute) = self.templates.get(input) {
+                attribute.as_ref()
+            } else {
+                None
+            }
         } else {
-            false
+            None
         }
     }
 
     /// Given the input attribute name, make an improvement suggestion.
     pub fn get_suggestion(&self, name: &str) -> Suggestion {
         // Is this already a semantic convention
-        if self.attribute_map.contains_key(name) || self.matches_template(name) {
+        if let Some(attribute) = self.attribute_map.get(name) {
+            // Is it deprecated?
+            if let Some(attribute) = &attribute {
+                if let Some(deprecated) = &attribute.deprecated {
+                    return Suggestion::Bad(vec![SuggestionComment::Deprecated(
+                        deprecated.clone(),
+                    )]);
+                } else {
+                    return Suggestion::Matching;
+                }
+            }
             Suggestion::Matching
+        } else if let Some(attribute) = self.matches_template(name) {
+            if let Some(deprecated) = &attribute.deprecated {
+                return Suggestion::Bad(vec![SuggestionComment::Deprecated(deprecated.clone())]);
+            } else {
+                return Suggestion::Matching;
+            }
         } else {
             let mut bad = false;
             // get all the suggestion comments
@@ -311,7 +334,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
-            templates: HashSet::new(),
+            templates: HashMap::new(),
         };
         sc.populate_builtins();
         assert!(sc.attribute_map.contains_key("duration_ms"));
@@ -329,7 +352,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
-            templates: HashSet::new(),
+            templates: HashMap::new(),
         };
         sc.insert_prefixes("a.b.c");
         assert!(sc.prefixes.contains("a"));
@@ -342,7 +365,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
-            templates: HashSet::new(),
+            templates: HashMap::new(),
         };
         sc.insert_prefixes("a.b.c");
         assert_eq!(sc.prefix_exists("a.b.c.d"), Some("a.b.c".to_string()));
@@ -355,7 +378,7 @@ mod tests {
         let mut sc = SemanticConventions {
             attribute_map: HashMap::new(),
             prefixes: HashSet::new(),
-            templates: HashSet::new(),
+            templates: HashMap::new(),
         };
         sc.attribute_map.insert("test".to_string(), None);
         assert_eq!(sc.similar("test"), Some(vec!["test".to_string()]));

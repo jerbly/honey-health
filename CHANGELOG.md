@@ -1,3 +1,7 @@
+# 0.4.2
+
+- Deprecated attributes will now show as `Bad` columns with the deprecation message. e.g. "`http.scheme` Bad - Deprecated: Replaced by `url.scheme` instead."
+
 # 0.4.1
 
 - Added `-s` or `--show-matches` to show all matching columns when analyzing a single dataset. By default only `Missing` and `Bad` columns are shown in the output.
