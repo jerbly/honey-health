@@ -1,3 +1,8 @@
+# 0.4.3
+
+- Fixed: "Similar" suggestions were including deprecated attributes.
+- Fixed: "Extends" suggestions were not including all namespaces.
+
 # 0.4.2
 
 - Deprecated attributes will now show as `Bad` columns with the deprecation message. e.g. "`http.scheme` Bad - Deprecated: Replaced by `url.scheme` instead."

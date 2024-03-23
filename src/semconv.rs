@@ -199,12 +199,12 @@ impl SemanticConventions {
                     let is_template = attribute.is_template();
                     if let Some(id) = &attribute.id {
                         let attribute_name = format!("{}.{}", prefix, id);
+                        self.insert_prefixes(&attribute_name);
                         if is_template {
                             self.templates.insert(attribute_name, Some(attribute));
                         } else {
                             self.attribute_map.insert(attribute_name, Some(attribute));
                         }
-                        self.insert_prefixes(&prefix);
                     }
                 }
             }
@@ -252,12 +252,41 @@ impl SemanticConventions {
 
     fn similar(&self, input: &str) -> Option<Vec<String>> {
         // See if there are some obvious similarities
-        let similars: Vec<String> = self
+
+        // Collect all the keys from the attribute_map and templates except
+        // those that are deprecated
+        let mut similars: Vec<String> = self
             .attribute_map
-            .keys()
-            .filter(|&key| jaro(input, key) > 0.85)
-            .cloned()
+            .iter()
+            .filter_map(|(key, value)| {
+                if let Some(attribute) = value {
+                    if attribute.deprecated.is_none() && (jaro(input, key) > 0.85) {
+                        Some(key.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
             .collect();
+        similars.extend(
+            self.templates
+                .iter()
+                .filter_map(|(key, value)| {
+                    if let Some(attribute) = value {
+                        if attribute.deprecated.is_none() && (jaro(input, key) > 0.85) {
+                            Some(key.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<String>>(),
+        );
+
         if !similars.is_empty() {
             Some(similars)
         } else {
