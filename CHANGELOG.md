@@ -1,3 +1,11 @@
+# 0.5.0
+
+- GitHub Issue Generation
+  - The `-g` or `--github-issue` option can be used to create GitHub Issues for attribute and enum health. Provide the repo owner and name e.g. `myorg/myrepo`. You must have a [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) that allows issue creation - put this in an environment variable `GITHUB_TOKEN` or a `.env` file.
+
+  - Honey-health will create a markdown table, split over multiple comments if necessary. Here are examples for [Attributes](https://github.com/jerbly/honey-health/issues/1) and [Enums](https://github.com/jerbly/honey-health/issues/2).
+
+
 # 0.4.3
 
 - Fixed: "Similar" suggestions were including deprecated attributes.

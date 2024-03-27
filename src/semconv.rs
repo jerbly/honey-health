@@ -23,12 +23,18 @@ impl Suggestion {
             Suggestion::Bad(_) => "Bad".to_string(),
         }
     }
-    pub fn get_comments_string(&self) -> String {
+    pub fn get_comments_string(&self, markdown: bool) -> String {
         match self {
             Suggestion::Matching => "".to_string(),
             Suggestion::Missing(comments) | Suggestion::Bad(comments) => comments
                 .iter()
-                .map(|x| x.to_string())
+                .map(|x| {
+                    if markdown {
+                        x.to_markdown()
+                    } else {
+                        x.to_string()
+                    }
+                })
                 .collect::<Vec<String>>()
                 .join("; "),
         }
@@ -39,7 +45,12 @@ impl Display for Suggestion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Suggestion::Matching => write!(f, "Matching"),
-            _ => write!(f, "{:7}  {}", self.get_name(), self.get_comments_string()),
+            _ => write!(
+                f,
+                "{:7}  {}",
+                self.get_name(),
+                self.get_comments_string(false)
+            ),
         }
     }
 }
@@ -52,6 +63,18 @@ pub enum SuggestionComment {
     Deprecated(String),
     //DeepNamespace, // TODO if the namespace is deep, it could indicate encoding a code path
     NoNamespace,
+}
+
+impl SuggestionComment {
+    pub fn to_markdown(&self) -> String {
+        match self {
+            SuggestionComment::WrongCase => "WrongCase".to_string(),
+            SuggestionComment::NoNamespace => "NoNamespace".to_string(),
+            SuggestionComment::Similar(v) => format!("Similar to `{}`", v.join("`, `")),
+            SuggestionComment::Extends(s) => format!("Extends `{}`", s),
+            SuggestionComment::Deprecated(s) => format!("Deprecated: {}", s),
+        }
+    }
 }
 
 impl Display for SuggestionComment {

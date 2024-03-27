@@ -16,9 +16,23 @@ The output depends on the number of datasets provided and found for analysis. If
               TaskId Bad      WrongCase; NoNamespace  
 ```
 
+You will always see the top section showing the number of Matching, Missing and Bad attributes. The Score is the proportion of Matching attributes (those which have defined Semantic Conventions).
+
+## Enums
+
 For single datasets you can also use the `-e` or `--enums` switch. This compares enum variants defined in semantic conventions with discovered variants used in tracing. Additional variants will be reported. If the attribute's enum definition has `allow_custom_values` set `true`, this is an _open enum_ and additional variants are "allowed". Honey-health still reports additional variants but as a warning (highlighted in yellow).
 
-You will always see the top section showing the number of Matching, Missing and Bad attributes. The Score is the proportion of Matching attributes (those which have defined Semantic Conventions).
+```text
+                  Column Undefined-variants
+            browser.type
+            message.type
+                 os.type Linux, Windows 10, Mac OS
+              rpc.system jsonrpc
+                rpc.type error
+  telemetry.sdk.language
+```
+
+## Multiple datasets
 
 If there is more that one dataset, the output is a csv file like so:
 
@@ -53,7 +67,7 @@ $ git clone https://github.com/jerbly/honey-health.git
 $ cd honey-health
 $ cargo build --release
 $ ./target/release/honey-health --version
-0.4.1
+0.5.0
 ```
 
 ## Usage
@@ -70,6 +84,7 @@ Options:
   -l, --last-written-days <LAST_WRITTEN_DAYS>  Max last written days [default: 30]
   -e, --enums                                  Enum check
   -s, --show-matches                           Show matches
+  -g, --github-issue <GITHUB_ISSUE>            GitHub issue
   -h, --help                                   Print help (see more with '--help')
   -V, --version                                Print version
 ```
@@ -77,3 +92,9 @@ Options:
 You must provide `HONEYCOMB_API_KEY` as an environment variable or in a `.env` file. This api key must have access to read datasets and columns.
 
 You must provide at least one path to the model root directory of OpenTelemetry Semantic Convention compatible yaml files. Provide multiple root directories separated by spaces after `--model`. It is recommended to clone the [OpenTelemetry Semantic Conventions](https://github.com/open-telemetry/semantic-conventions) project and add this alongside your own Semantic Conventions. For example: `honey-health --model /code/semantic-conventions/model`
+
+### GitHub Issue Generation
+
+The `-g` or `--github-issue` option can be used to create GitHub Issues for attribute and enum health. Provide the repo owner and name e.g. `myorg/myrepo`. You must have a [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) that allows issue creation - put this in an environment variable `GITHUB_TOKEN` or a `.env` file.
+
+Honey-health will create a markdown table, split over multiple comments if necessary. Here are examples for [Attributes](https://github.com/jerbly/honey-health/issues/1) and [Enums](https://github.com/jerbly/honey-health/issues/2).

@@ -1,3 +1,4 @@
+mod octo;
 mod semconv;
 
 use std::{
@@ -67,6 +68,15 @@ impl DatasetHealth {
             matching: 0,
             missing: 0,
             bad: 0,
+        }
+    }
+
+    fn score(&self) -> f64 {
+        let total = self.matching + self.missing + self.bad;
+        if total == 0 {
+            0.0
+        } else {
+            (self.matching as f64 / total as f64) * 100.0
         }
     }
 }
@@ -163,7 +173,7 @@ impl ColumnUsageMap {
                 c.column.key_name,
                 c.column.r#type,
                 c.suggestion.get_name(),
-                c.suggestion.get_comments_string(),
+                c.suggestion.get_comments_string(false),
                 c.datasets_as_string()
             )?;
         }
@@ -191,12 +201,6 @@ impl ColumnUsageMap {
         );
         for (dataset_num, dataset_slug) in self.datasets.iter().enumerate() {
             let dataset_health = &self.dataset_health[dataset_num];
-            let total = dataset_health.matching + dataset_health.missing + dataset_health.bad;
-            let score = if total == 0 {
-                0.0
-            } else {
-                (dataset_health.matching as f64 / total as f64) * 100.0
-            };
 
             println!(
                 "{:>width$}  {:4} {:4} {:4} {:>5.1}%",
@@ -204,7 +208,7 @@ impl ColumnUsageMap {
                 dataset_health.matching,
                 dataset_health.missing,
                 dataset_health.bad,
-                score,
+                dataset_health.score(),
                 width = longest
             );
         }
@@ -215,14 +219,8 @@ impl ColumnUsageMap {
         if self.datasets.len() != 1 {
             return;
         }
+        let longest = self.longest_column_name();
         let mut columns = self.map.values().collect::<Vec<_>>();
-        let longest = "Column".len().max(
-            columns
-                .iter()
-                .map(|c| c.column.key_name.len())
-                .max()
-                .unwrap_or(0),
-        );
         columns.sort_by(|a, b| a.column.key_name.cmp(&b.column.key_name));
         println!(
             "\n{:>width$} {}",
@@ -257,21 +255,198 @@ impl ColumnUsageMap {
         }
     }
 
-    async fn print_enum_report(&self) -> anyhow::Result<()> {
+    fn markdown_dataset_report(&self) -> Option<(String, Vec<String>)> {
+        // If there's only one dataset, print the columns that are not matching
+        if self.datasets.len() != 1 {
+            return None;
+        }
+        // Build the health header
+        let dataset_slug = &self.datasets[0];
+        let dataset_health = &self.dataset_health[0];
+        let markdown_header = format!(
+            "## Dataset: {}\n\n - Matching: {}\n - Missing: {}\n - Bad: {}\n - Score: {:.1}%\n\n",
+            dataset_slug,
+            dataset_health.matching,
+            dataset_health.missing,
+            dataset_health.bad,
+            dataset_health.score(),
+        );
+
+        // make a vec of tuples of column name and suggestion when not matching
+        let mut columns = self
+            .map
+            .values()
+            .filter_map(|c| {
+                if c.suggestion != Suggestion::Matching {
+                    Some((
+                        c.column.key_name.clone(),
+                        c.suggestion.get_name(),
+                        c.suggestion.get_comments_string(true),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if columns.is_empty() {
+            return None;
+        }
+        let mut markdown = vec![];
+        let longest_key = "Column"
+            .len()
+            .max(columns.iter().map(|c| c.0.len()).max().unwrap_or(0))
+            + 2;
+
+        let longest_suggestion = "Suggestion"
+            .len()
+            .max(columns.iter().map(|c| c.2.len()).max().unwrap_or(0));
+
+        columns.sort_by(|a, b| a.0.cmp(&b.0));
+        markdown.push(format!(
+            "| {:k_width$} | {:7} | {:s_width$} |",
+            "Column",
+            "Type",
+            "Suggestion",
+            k_width = longest_key,
+            s_width = longest_suggestion
+        ));
+        markdown.push(format!(
+            "| {:k_width$}: | :-----: | :{:s_width$} |",
+            "-".repeat(longest_key - 1),
+            "-".repeat(longest_suggestion - 1),
+            k_width = longest_key - 1,
+            s_width = longest_suggestion - 1
+        ));
+        for c in columns {
+            markdown.push(format!(
+                "| `{:k_width$} | {:7} | {:s_width$} |",
+                c.0 + "`",
+                c.1,
+                c.2,
+                k_width = longest_key,
+                s_width = longest_suggestion
+            ));
+        }
+        Some((markdown_header, markdown))
+    }
+
+    fn longest_column_name(&self) -> usize {
+        "Column".len().max(
+            self.map
+                .values()
+                .map(|c| c.column.key_name.len())
+                .max()
+                .unwrap_or(0),
+        )
+    }
+
+    fn print_enum_report(
+        &self,
+        enum_report_rows: &Vec<(String, bool, Vec<String>)>,
+    ) -> anyhow::Result<()> {
         // If there's only one dataset, print the enum comparisons
         if self.datasets.len() != 1 {
             return Ok(());
         }
+        let longest = self.longest_column_name();
 
-        let mut columns = self.map.values().collect::<Vec<_>>();
-        let longest = "Column".len().max(
-            columns
-                .iter()
-                .map(|c| c.column.key_name.len())
-                .max()
-                .unwrap_or(0),
+        println!(
+            "\n{:>width$} {}",
+            "Column".bold(),
+            "Undefined-variants".bold(),
+            width = longest
         );
 
+        for (c, allow_custom_values, found_variants) in enum_report_rows {
+            if found_variants.is_empty() {
+                println!("{:>width$}", c.green(), width = longest);
+            } else if *allow_custom_values {
+                println!(
+                    "{:>width$} {}",
+                    c.yellow(),
+                    found_variants.join(", "),
+                    width = longest
+                );
+            } else {
+                println!(
+                    "{:>width$} {}",
+                    c.red(),
+                    found_variants.join(", "),
+                    width = longest
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn markdown_enum_report(
+        &self,
+        enum_report_rows: Vec<(String, bool, Vec<String>)>,
+    ) -> anyhow::Result<(String, Vec<String>)> {
+        let dataset_slug = &self.datasets[0];
+        let markdown_header = format!("## Dataset: {}\n\n", dataset_slug);
+
+        // Make the strings for each row
+        let mut row_strings = vec![];
+        let mut c_len = "Column".len();
+        let mut v_len = "Undefined-variants".len();
+        for (c, allow_custom_values, found_variants) in enum_report_rows {
+            if !found_variants.is_empty() {
+                let c_name = format!("`{}`", c);
+                c_len = c_len.max(c_name.len());
+                let variants = format!("`{}`", found_variants.join("`, `"));
+                v_len = v_len.max(variants.len());
+                let kind = if allow_custom_values {
+                    "Warning".to_owned()
+                } else {
+                    "Error".to_owned()
+                };
+                row_strings.push((c_name, kind, variants));
+            }
+        }
+
+        let mut markdown = vec![];
+        markdown.push(format!(
+            "| {:>c_width$} | {:7} | {:v_width$} |",
+            "Column",
+            "Kind",
+            "Undefined-variants",
+            c_width = c_len,
+            v_width = v_len
+        ));
+
+        markdown.push(format!(
+            "| {:c_width$}: | :-----: | :{:v_width$} |",
+            "-".repeat(c_len - 1),
+            "-".repeat(v_len - 1),
+            c_width = c_len - 1,
+            v_width = v_len - 1
+        ));
+
+        for r in row_strings {
+            markdown.push(format!(
+                "| {:c_width$} | {:7} | {:v_width$} |",
+                r.0,
+                r.1,
+                r.2,
+                c_width = c_len,
+                v_width = v_len
+            ));
+        }
+
+        Ok((markdown_header, markdown))
+    }
+
+    async fn enum_report(&self) -> anyhow::Result<Vec<(String, bool, Vec<String>)>> {
+        let mut v_results = Vec::new();
+
+        // If there's only one dataset, print the enum comparisons
+        if self.datasets.len() != 1 {
+            return Ok(v_results);
+        }
+        let mut columns = self.map.values().collect::<Vec<_>>();
         columns.retain(|c| {
             if c.suggestion == Suggestion::Matching {
                 if let Some(Some(a)) = self.semconv.attribute_map.get(&c.column.key_name) {
@@ -285,7 +460,7 @@ impl ColumnUsageMap {
 
         if columns.is_empty() {
             println!("\nNo columns with enum types");
-            return Ok(());
+            return Ok(v_results);
         }
 
         let column_ids = columns
@@ -302,41 +477,18 @@ impl ColumnUsageMap {
             .await?;
         results.sort();
 
-        println!(
-            "\n{:>width$} {}",
-            "Column".bold(),
-            "Undefined-variants".bold(),
-            width = longest
-        );
-
         for (c, mut found_variants) in results {
             if let Some(Some(a)) = self.semconv.attribute_map.get(&c) {
                 if let Some(semconv::Type::Complex(atype)) = &a.r#type {
                     let defined_variants = atype.get_simple_variants();
                     // remove all defined enums from found_enums
                     found_variants.retain(|e| !defined_variants.contains(e));
-                    if found_variants.is_empty() {
-                        println!("{:>width$}", c.green(), width = longest);
-                    } else if atype.allow_custom_values {
-                        println!(
-                            "{:>width$} {}",
-                            c.yellow(),
-                            found_variants.join(", "),
-                            width = longest
-                        );
-                    } else {
-                        println!(
-                            "{:>width$} {}",
-                            c.red(),
-                            found_variants.join(", "),
-                            width = longest
-                        );
-                    }
+                    v_results.push((c, atype.allow_custom_values, found_variants));
                 }
             }
         }
 
-        Ok(())
+        Ok(v_results)
     }
 }
 
@@ -388,6 +540,13 @@ struct Args {
     /// Show all matching attributes when analyzing a single dataset.
     #[arg(short, long, default_value_t = false)]
     show_matches: bool,
+
+    /// GitHub issue
+    ///
+    /// Create a GitHub issue with the dataset report. Provide the
+    /// repository owner and name e.g. "jerbly/honey-health".
+    #[arg(short, long, required = false)]
+    github_issue: Option<String>,
 }
 
 #[tokio::main]
@@ -418,8 +577,20 @@ async fn main() -> anyhow::Result<()> {
     }
     cm.print_health();
     cm.print_dataset_report(args.show_matches);
+    let mut enum_report_rows = vec![];
     if args.enums {
-        cm.print_enum_report().await?;
+        enum_report_rows = cm.enum_report().await?;
+        cm.print_enum_report(&enum_report_rows)?;
+    }
+    if let Some(repo) = args.github_issue {
+        let (repo_owner, repo_name) = repo.split_once('/').context("Invalid repository")?;
+        if let Some((header, body)) = cm.markdown_dataset_report() {
+            octo::create_dataset_report_issue(repo_owner, repo_name, header, body).await?;
+        }
+        if !enum_report_rows.is_empty() {
+            let (header, body) = cm.markdown_enum_report(enum_report_rows)?;
+            octo::create_enum_report_issue(repo_owner, repo_name, header, body).await?;
+        }
     }
     Ok(())
 }
