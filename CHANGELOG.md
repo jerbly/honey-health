@@ -1,3 +1,7 @@
+# 0.5.1
+
+- Fixed: Groups were not loading if the `prefix` was missing.
+
 # 0.5.0
 
 - GitHub Issue Generation

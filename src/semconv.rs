@@ -217,11 +217,16 @@ impl SemanticConventions {
         //println!("{:?}", path.as_os_str());
         let groups: Groups = serde_yaml::from_reader(&File::open(path)?)?;
         for group in groups.groups {
-            if let (Some(prefix), Some(attributes)) = (group.prefix, group.attributes) {
+            if let Some(attributes) = group.attributes {
                 for attribute in attributes {
                     let is_template = attribute.is_template();
                     if let Some(id) = &attribute.id {
-                        let attribute_name = format!("{}.{}", prefix, id);
+                        let attribute_name = match &group.prefix {
+                            Some(prefix) => {
+                                format!("{}.{}", prefix, id)
+                            }
+                            None => id.to_string(),
+                        };
                         self.insert_prefixes(&attribute_name);
                         if is_template {
                             self.templates.insert(attribute_name, Some(attribute));
