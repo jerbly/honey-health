@@ -1,3 +1,7 @@
+# 0.5.2
+
+- The `allow_custom_values` setting for enums has been removed from the semantic conventions spec. Removed all related code. This field will now just be ignored.
+
 # 0.5.1
 
 - Fixed: Groups were not loading if the `prefix` was missing.

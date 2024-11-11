@@ -343,7 +343,7 @@ impl ColumnUsageMap {
 
     fn print_enum_report(
         &self,
-        enum_report_rows: &Vec<(String, bool, Vec<String>)>,
+        enum_report_rows: &Vec<(String, Vec<String>)>,
     ) -> anyhow::Result<()> {
         // If there's only one dataset, print the enum comparisons
         if self.datasets.len() != 1 {
@@ -358,16 +358,9 @@ impl ColumnUsageMap {
             width = longest
         );
 
-        for (c, allow_custom_values, found_variants) in enum_report_rows {
+        for (c, found_variants) in enum_report_rows {
             if found_variants.is_empty() {
                 println!("{:>width$}", c.green(), width = longest);
-            } else if *allow_custom_values {
-                println!(
-                    "{:>width$} {}",
-                    c.yellow(),
-                    found_variants.join(", "),
-                    width = longest
-                );
             } else {
                 println!(
                     "{:>width$} {}",
@@ -383,7 +376,7 @@ impl ColumnUsageMap {
 
     fn markdown_enum_report(
         &self,
-        enum_report_rows: Vec<(String, bool, Vec<String>)>,
+        enum_report_rows: Vec<(String, Vec<String>)>,
     ) -> anyhow::Result<(String, Vec<String>)> {
         let dataset_slug = &self.datasets[0];
         let markdown_header = format!("## Dataset: {}\n\n", dataset_slug);
@@ -392,18 +385,13 @@ impl ColumnUsageMap {
         let mut row_strings = vec![];
         let mut c_len = "Column".len();
         let mut v_len = "Undefined-variants".len();
-        for (c, allow_custom_values, found_variants) in enum_report_rows {
+        for (c, found_variants) in enum_report_rows {
             if !found_variants.is_empty() {
                 let c_name = format!("`{}`", c);
                 c_len = c_len.max(c_name.len());
                 let variants = format!("`{}`", found_variants.join("`, `"));
                 v_len = v_len.max(variants.len());
-                let kind = if allow_custom_values {
-                    "Warning".to_owned()
-                } else {
-                    "Error".to_owned()
-                };
-                row_strings.push((c_name, kind, variants));
+                row_strings.push((c_name, "Error".to_owned(), variants));
             }
         }
 
@@ -439,7 +427,7 @@ impl ColumnUsageMap {
         Ok((markdown_header, markdown))
     }
 
-    async fn enum_report(&self) -> anyhow::Result<Vec<(String, bool, Vec<String>)>> {
+    async fn enum_report(&self) -> anyhow::Result<Vec<(String, Vec<String>)>> {
         let mut v_results = Vec::new();
 
         // If there's only one dataset, print the enum comparisons
@@ -483,7 +471,7 @@ impl ColumnUsageMap {
                     let defined_variants = atype.get_simple_variants();
                     // remove all defined enums from found_enums
                     found_variants.retain(|e| !defined_variants.contains(e));
-                    v_results.push((c, atype.allow_custom_values, found_variants));
+                    v_results.push((c, found_variants));
                 }
             }
         }

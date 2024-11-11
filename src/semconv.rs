@@ -113,7 +113,6 @@ pub struct Member {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ComplexType {
     #[serde(default)]
-    pub allow_custom_values: bool,
     pub members: Vec<Member>,
 }
 
@@ -202,7 +201,11 @@ impl SemanticConventions {
             "meta.annotation_type",
             "parent_name",
             "status_code",
+            "status_message",
             "error",
+            "meta.time_since_span_start_ms",
+            "trace.link.trace_id",
+            "trace.link.span_id",
         ];
         for builtin in builtins {
             self.attribute_map.insert(builtin.to_owned(), None);
