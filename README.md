@@ -20,7 +20,7 @@ You will always see the top section showing the number of Matching, Missing and 
 
 ## Enums
 
-For single datasets you can also use the `-e` or `--enums` switch. This compares enum variants defined in semantic conventions with discovered variants used in tracing. Additional variants will be reported. If the attribute's enum definition has `allow_custom_values` set `true`, this is an _open enum_ and additional variants are "allowed". Honey-health still reports additional variants but as a warning (highlighted in yellow).
+For single datasets you can also use the `-e` or `--enums` switch. This compares enum variants defined in semantic conventions with discovered variants used in tracing. Additional variants will be reported.
 
 ```text
                   Column Undefined-variants
