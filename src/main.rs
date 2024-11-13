@@ -87,6 +87,7 @@ struct ColumnUsageMap {
     datasets: Vec<String>,
     dataset_health: Vec<DatasetHealth>,
     semconv: SemanticConventions,
+    max_last_written_days: usize,
 }
 
 impl ColumnUsageMap {
@@ -102,6 +103,7 @@ impl ColumnUsageMap {
             datasets: vec![],
             dataset_health: vec![],
             semconv: sc,
+            max_last_written_days,
         };
         let hc = honeycomb_client::get_honeycomb(&["columns", "createDatasets"])
             .await?
@@ -460,8 +462,9 @@ impl ColumnUsageMap {
             .await?
             .context("API key does not have required access")?;
 
+        let range_seconds = self.max_last_written_days * 24 * 60 * 60;
         let mut results = hc
-            .get_all_group_by_variants(&self.datasets[0], &column_ids)
+            .get_all_group_by_variants(&self.datasets[0], &column_ids, range_seconds)
             .await?;
         results.sort();
 

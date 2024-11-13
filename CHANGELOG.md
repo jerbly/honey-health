@@ -1,3 +1,7 @@
+# 0.5.3
+
+- Enum reports now use the `-l, --last-written-days` option to limit the data queried up to 7 days maximum. This is useful when you've pushed a change and want to check the results the next day.
+
 # 0.5.2
 
 - The `allow_custom_values` setting for enums has been removed from the semantic conventions spec. Removed all related code. This field will now just be ignored.
