@@ -171,7 +171,7 @@ impl ColumnUsageMap {
         for c in columns {
             writeln!(
                 file,
-                "{},{},{},{},{}",
+                "\"{}\",\"{}\",\"{}\",\"{}\",{}",
                 c.column.key_name,
                 c.column.r#type,
                 c.suggestion.get_name(),
@@ -472,8 +472,13 @@ impl ColumnUsageMap {
             if let Some(Some(a)) = self.semconv.attribute_map.get(&c) {
                 if let Some(semconv::Type::Complex(atype)) = &a.r#type {
                     let defined_variants = atype.get_simple_variants();
+                    // trim all whitespace from found_variants
                     // remove all defined enums from found_enums
-                    found_variants.retain(|e| !defined_variants.contains(e));
+                    found_variants = found_variants
+                        .into_iter()
+                        .map(|e| e.trim().to_owned())
+                        .filter(|e| !defined_variants.contains(e))
+                        .collect();
                     v_results.push((c, found_variants));
                 }
             }

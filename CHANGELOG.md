@@ -1,3 +1,7 @@
+# 0.5.4
+
+- Fixed bugs: CSV escaping was required for `,` appearing in some strings. Whitespace removed around variants in the enum report.
+
 # 0.5.3
 
 - Enum reports now use the `-l, --last-written-days` option to limit the data queried up to 7 days maximum. This is useful when you've pushed a change and want to check the results the next day.
