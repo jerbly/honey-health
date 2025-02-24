@@ -89,7 +89,7 @@ Options:
   -V, --version                                Print version
 ```
 
-You must provide `HONEYCOMB_API_KEY` as an environment variable or in a `.env` file. This api key must have access to read datasets and columns.
+You must provide `HONEYCOMB_API_KEY` as an environment variable or in a `.env` file. This API key must be an [environment configuration key](https://docs.honeycomb.io/get-started/configure/environments/manage-api-keys/#configuration-keys) with permissions to `Create Datasets` and `Manage Queries and Columns`.
 
 You must provide at least one path to the model root directory of OpenTelemetry Semantic Convention compatible yaml files. Provide multiple root directories separated by spaces after `--model`. It is recommended to clone the [OpenTelemetry Semantic Conventions](https://github.com/open-telemetry/semantic-conventions) project and add this alongside your own Semantic Conventions. For example: `honey-health --model /code/semantic-conventions/model`
 
